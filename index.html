@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat</title>
+  <style>
+    body{font-family:sans-serif;max-width:760px;margin:20px auto;padding:0 12px}
+    #log{border:1px solid #ddd;border-radius:10px;padding:12px;min-height:240px}
+    .msg{margin:8px 0}
+    .me{font-weight:600}
+    .bot{color:#333}
+    form{display:flex;gap:8px;margin-top:12px}
+    input{flex:1;padding:10px;border-radius:10px;border:1px solid #ddd}
+    button{padding:10px 14px;border-radius:10px;border:1px solid #ddd;cursor:pointer}
+  </style>
+</head>
+<body>
+  <h1>Mein Chat</h1>
+  <div id="log"></div>
+
+  <form id="f">
+    <input id="q" placeholder="Schreib was…" autocomplete="off" />
+    <button>Senden</button>
+  </form>
+
+  <script>
+    const WEBHOOK_URL = "https://DEIN-N8N-DOMAIN/webhook/chat"; // <-- anpassen
+    const log = document.getElementById('log');
+    const f = document.getElementById('f');
+    const q = document.getElementById('q');
+
+    const add = (role, text) => {
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.innerHTML = `<span class="${role}">${role === 'me' ? 'Du' : 'Bot'}:</span> ${text}`;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    };
+
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = q.value.trim();
+      if (!text) return;
+      q.value = "";
+      add('me', text);
+
+      try {
+        const res = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            sessionId: localStorage.getItem("sessionId") || (()=>{
+              const id = crypto.randomUUID();
+              localStorage.setItem("sessionId", id);
+              return id;
+            })()
+          })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        add('bot', data.reply ?? JSON.stringify(data));
+      } catch (err) {
+        add('bot', `Fehler: ${err.message}`);
+      }
+    });
+  </script>
+</body>
+</html>
