@@ -2,72 +2,548 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>V-Model Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
-    body{font-family:sans-serif;max-width:760px;margin:20px auto;padding:0 12px}
-    #log{border:1px solid #ddd;border-radius:10px;padding:12px;min-height:240px}
-    .msg{margin:8px 0}
-    .me{font-weight:600}
-    .bot{color:#333}
-    form{display:flex;gap:8px;margin-top:12px}
-    input{flex:1;padding:10px;border-radius:10px;border:1px solid #ddd}
-    button{padding:10px 14px;border-radius:10px;border:1px solid #ddd;cursor:pointer}
+    :root {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      --primary: #e20074;
+      --primary-hover: #e20074;
+      --bg: #f4f6f9;
+      --card-bg: #ffffff;
+      --border: #e9edf3;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+
+    .app {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      height: 100vh;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.06);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      background: var(--card-bg);
+    }
+
+    .sub {
+      font-weight: 500;
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .chatlog { padding: 14px 16px; overflow: auto; flex: 1; }
+
+    .msg {
+      margin: 10px 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      max-width: 90%;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .user { background: #e8f0ff; margin-left: auto; border-bottom-right-radius: 4px; }
+    .bot { background: #f3f4f6; border-bottom-left-radius: 4px; }
+    .bot.error { background: #fef2f2; color: #b91c1c; }
+    .bot.success { background: #f0fdf4; color: #166534; }
+
+    .composer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+    }
+
+    textarea {
+      flex: 1;
+      resize: none;
+      border: 1px solid #d6dde8;
+      border-radius: 10px;
+      padding: 12px;
+      height: 48px;
+      outline: none;
+      font-family: inherit;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus { border-color: var(--primary); }
+
+    button {
+      border: 0;
+      background: var(--primary);
+      color: white;
+      padding: 0 20px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    button:hover:not(:disabled) { background: var(--primary-hover); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .out { padding: 14px 16px; overflow: auto; flex: 1; }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin: 10px 0;
+      background: var(--card-bg);
+    }
+
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #e20074;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tag.dashboard { background: #f0fdf4; color: #166534; }
+    .tag.error { background: #fef2f2; color: #b91c1c; }
+
+    .hint { color: var(--text-muted); font-size: 13px; }
+
+    .dashboard-container {
+      width: 100%;
+      min-height: 500px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .dashboard-container iframe {
+      width: 100%;
+      height: 75vh;
+      border: none;
+      border-radius: 12px;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .answer-content { line-height: 1.7; font-size: 14px; }
+    .answer-content h1, .answer-content h2, .answer-content h3 { margin: 16px 0 8px 0; color: var(--text); font-weight: 600; }
+    .answer-content h2 { color: var(--primary); }
+    .answer-content table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+    .answer-content thead { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .answer-content th { padding: 12px 14px; text-align: left; font-weight: 600; }
+    .answer-content td { padding: 10px 14px; border-bottom: 1px solid #eee; }
+    .answer-content tbody tr:hover { background: #f8fafc; }
+    .answer-content ul, .answer-content ol { margin: 12px 0; padding-left: 24px; }
+    .answer-content li { margin: 6px 0; }
+    .answer-content strong { color: var(--primary); }
+
+    /* Refresh Button für Dashboard */
+    .refresh-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .refresh-btn:hover { background: var(--primary-hover); }
+
+    /* GitHub Pages Hinweis */
+    .github-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 8px;
+    }
+    .github-note a {
+      color: var(--primary);
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
-  <h1>V-Model Chat</h1>
-  <div id="log"></div>
+  <div class="app">
+    <!-- LEFT: CHAT -->
+    <div class="panel">
+      <div class="header">
+         V-Model Chat
+        <div class="sub"> Frage eingeben – Daten, Analyse und Visualisierung erhalten oder Aktionen ausführen</div>
+      </div>
 
-  <form id="f">
-    <input id="q" placeholder="Schreib was…" autocomplete="off" />
-    <button>Senden</button>
-  </form>
+      <div id="chatlog" class="chatlog">
+        <div class="msg bot">
+          Hi! Frag z.B. „Get all requirement entities" oder „Get all software part entities related to requirement entities".
+        </div>
+      </div>
+
+      <div class="composer">
+        <textarea id="input" placeholder="Schreibe deine Frage..."></textarea>
+        <button id="send">Senden</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: OUTPUT -->
+    <div class="panel">
+      <div class="header">
+        Output
+        <div class="sub">Texte oder Visualisierungen werden hier angezeigt</div>
+      </div>
+
+      <div id="output" class="out">
+        <div class="hint">Noch keine Antwort. Sende links eine Frage.</div>
+      </div>
+    </div>
+  </div>
 
   <script>
-    const WEBHOOK_URL = "https://primary-production-1384.up.railway.app/webhook/v-model_chat"; // <-- anpassen
-    const log = document.getElementById('log');
-    const f = document.getElementById('f');
-    const q = document.getElementById('q');
-
-    const add = (role, text) => {
-      const div = document.createElement('div');
-      div.className = `msg ${role}`;
-      div.innerHTML = `<span class="${role}">${role === 'me' ? 'Du' : 'Bot'}:</span> ${text}`;
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
+    // ============================================================
+    // KONFIGURATION
+    // ============================================================
+    const CONFIG = {
+      WEBHOOK_URL: "https://primary-production-1384.up.railway.app/webhook/v-model_chat",
+      DASHBOARD_BASE_URL: "",
+      TIMEOUT: 120000,
+      // Verzögerung bevor iframe geladen wird (GitHub Pages braucht Zeit)
+      GITHUB_PAGES_DELAY: 3000
     };
 
-    f.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const text = q.value.trim();
-      if (!text) return;
-      q.value = "";
-      add('me', text);
+    // ============================================================
+    // Marked.js konfigurieren
+    // ============================================================
+    marked.setOptions({ breaks: true, gfm: true, headerIds: false, mangle: false });
+
+    // ============================================================
+    // DOM Elements
+    // ============================================================
+    const chatlog = document.getElementById('chatlog');
+    const output = document.getElementById('output');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+
+    // Speichere die aktuelle Dashboard-URL
+    let currentDashboardUrl = null;
+
+    // ============================================================
+    // Chat Functions
+    // ============================================================
+    function addMsg(role, text, extraClass = '') {
+      const div = document.createElement('div');
+      div.className = `msg ${role} ${extraClass}`.trim();
+      div.innerHTML = text;
+      chatlog.appendChild(div);
+      chatlog.scrollTop = chatlog.scrollHeight;
+    }
+
+    function showLoading() {
+      output.innerHTML = `
+        <div class="card">
+          <div class="loading">
+            <div class="spinner"></div>
+            <span>Verarbeite Anfrage...</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // ============================================================
+    // Output Display Functions
+    // ============================================================
+    function showTextAnswer(text) {
+      const htmlContent = marked.parse(text);
+      output.innerHTML = `
+        <div class="card">
+          <div class="tag">Antwort</div>
+          <div class="answer-content">${htmlContent}</div>
+        </div>
+      `;
+    }
+
+    function showDashboardInline(htmlContent, title = 'Dashboard') {
+      output.innerHTML = `
+        <div class="card">
+          <div class="tag dashboard">📊 ${escapeHtml(title)}</div>
+          <div class="dashboard-container">
+            <iframe srcdoc="${escapeHtml(htmlContent)}" sandbox="allow-scripts allow-same-origin"></iframe>
+          </div>
+        </div>
+      `;
+    }
+
+    function showDashboardUrl(url, title = 'Dashboard') {
+      const cacheBustedUrl = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+      currentDashboardUrl = cacheBustedUrl;
+
+      output.innerHTML = `
+        <div class="card">
+          <div class="tag dashboard">📊 ${escapeHtml(title)}</div>
+          <div class="dashboard-container">
+            <button class="refresh-btn" onclick="refreshDashboard()">🔄 Aktualisieren</button>
+            <iframe id="dashboard-iframe" src="${cacheBustedUrl}"></iframe>
+          </div>
+          <div class="github-note">
+            Dashboard URL: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>
+          </div>
+        </div>
+      `;
+    }
+
+    function showDashboardUrlWithDelay(url, title = 'Dashboard') {
+      output.innerHTML = `
+        <div class="card">
+          <div class="tag dashboard">📊 ${escapeHtml(title)}</div>
+          <div class="dashboard-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px;">
+            <div class="loading">
+              <div class="spinner"></div>
+              <span>Dashboard wird auf GitHub Pages bereitgestellt...</span>
+            </div>
+            <p style="color: var(--text-muted); font-size: 12px; margin-top: 12px;">
+              Bitte warten, GitHub Pages wird aktualisiert...
+            </p>
+          </div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        showDashboardUrl(url, title);
+      }, CONFIG.GITHUB_PAGES_DELAY);
+    }
+
+    // ============================================================
+    // Dashboard refresh Funktion (global)
+    // ============================================================
+    window.refreshDashboard = function() {
+      const iframe = document.getElementById('dashboard-iframe');
+      if (!iframe) return;
+
+      // ✅ Basis-URL robust bestimmen (falls currentDashboardUrl schon Query hat)
+      const base = (currentDashboardUrl || CONFIG.DASHBOARD_BASE_URL).split('?')[0];
+      const newUrl = base + '?t=' + Date.now();
+
+      iframe.src = newUrl;
+      currentDashboardUrl = newUrl;
+    };
+
+    function showError(message) {
+      output.innerHTML = `
+        <div class="card">
+          <div class="tag error">Fehler</div>
+          <div class="answer-content">${escapeHtml(message)}</div>
+        </div>
+      `;
+    }
+
+    // ============================================================
+    // Utility Functions
+    // ============================================================
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // ✅ NEW: Robust JSON Parsing für n8n Responses
+    // Handles:
+    // 1) {"type":"dashboard", ...}
+    // 2) {"output":"{\"type\":\"dashboard\",...}"}  <-- your current case
+    function parseN8nResponse(rawText) {
+      if (!rawText || rawText.trim() === '') {
+        return { type: "text", answer: "Leere Antwort vom Server erhalten." };
+      }
+
+      // First parse attempt
+      try {
+        const parsed = JSON.parse(rawText);
+
+        // If n8n wraps the real payload inside "output" as string, unwrap it
+        if (parsed && typeof parsed === 'object' && typeof parsed.output === 'string') {
+          const inner = parsed.output.trim();
+
+          // Try parse inner directly
+          try {
+            return JSON.parse(inner);
+          } catch (e1) {
+            // Sometimes it's double-quoted; remove outer quotes and try again
+            const unquoted = inner.replace(/^"+|"+$/g, '');
+            try {
+              return JSON.parse(unquoted);
+            } catch (e2) {
+              // Fallback
+              return { type: "text", answer: inner };
+            }
+          }
+        }
+
+        return parsed;
+      } catch (e) {
+        // Not JSON → treat as plain text
+        return { type: "text", answer: rawText };
+      }
+    }
+
+    // ============================================================
+    // n8n API Call
+    // ============================================================
+    async function callN8N(message) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT);
 
       try {
-        const res = await fetch(WEBHOOK_URL, {
+        const response = await fetch(CONFIG.WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: text,
-            sessionId: localStorage.getItem("sessionId") || (()=>{
-              const id = crypto.randomUUID();
-              localStorage.setItem("sessionId", id);
-              return id;
-            })()
-          })
+            message: message,
+            timestamp: new Date().toISOString()
+          }),
+          signal: controller.signal
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        add('bot', data.reply ?? JSON.stringify(data));
-      } catch (err) {
-        add('bot', `Fehler: ${err.message}`);
+        clearTimeout(timeoutId);
+
+        const rawText = await response.text();
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${rawText || 'Keine Details'}`);
+        }
+
+        return parseN8nResponse(rawText);
+
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('Timeout: Die Anfrage hat zu lange gedauert.');
+        }
+        throw error;
+      }
+    }
+
+    // ============================================================
+    // Main Send Handler
+    // ============================================================
+    async function onSend() {
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      input.value = '';
+      sendBtn.disabled = true;
+      addMsg('user', escapeHtml(msg));
+      showLoading();
+
+      try {
+        const response = await callN8N(msg);
+
+        switch (response.type) {
+          case 'text':
+            addMsg('bot', 'Antwort erhalten ✓');
+            showTextAnswer(response.answer || 'Keine Antwort erhalten.');
+            break;
+
+          case 'dashboard':
+            if (response.html) {
+              addMsg('bot', `✅ Dashboard "${response.title || 'Dashboard'}" wurde erstellt`, 'success');
+              showDashboardInline(response.html, response.title);
+            } else if (response.url) {
+              addMsg('bot', `✅ Dashboard "${response.title || 'Dashboard'}" ist bereit`, 'success');
+              showDashboardUrlWithDelay(response.url, response.title);
+            } else {
+              throw new Error('Dashboard-Antwort enthält weder HTML noch URL');
+            }
+            break;
+
+          default: {
+            const fallbackText =
+              response.answer ||
+              response.text ||
+              response.output || // in case it still comes through
+              JSON.stringify(response, null, 2);
+
+            addMsg('bot', 'Antwort erhalten');
+            showTextAnswer(fallbackText);
+            break;
+          }
+        }
+
+      } catch (error) {
+        console.error('Error:', error);
+        addMsg('bot', `❌ ${escapeHtml(error.message)}`, 'error');
+        showError(error.message);
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    // ============================================================
+    // Event Listeners
+    // ============================================================
+    sendBtn.addEventListener('click', onSend);
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        onSend();
       }
     });
+
+    input.focus();
   </script>
 </body>
-
 </html>
-
